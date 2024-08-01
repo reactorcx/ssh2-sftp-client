@@ -2,7 +2,6 @@
 const { Client } = require('ssh2');
 const fs = require('node:fs');
 const concat = require('concat-stream');
-const promiseRetry = require('promise-retry');
 const { join, parse } = require('node:path');
 const {
   globalListener,
@@ -193,17 +192,18 @@ class SftpClient {
         factor: config.retry_factor ?? 2,
         minTimeout: config.retry_minTimeout ?? 25000,
       };
-      await promiseRetry(retryOpts, async (retry, attempt) => {
+      let promiseRetry = async (attempt, retries) => {
         try {
-          this.debugMsg(`connect: Connect attempt ${attempt}`);
           await this.getConnection(config);
-        } catch (err) {
+          } catch (err) {
+            if (attempt < retryOpts.retries) {
+              await promiseRetry(attempt + 1, retries);
+            }
           switch (err.code) {
             case 'ENOTFOUND':
             case 'ECONNREFUSED':
-            case 'ERR_SOCKET_BAD_PORT': {
+            case 'ERR_SOCKET_BAD_PORT':
               throw err;
-            }
             case undefined: {
               if (
                 err.message.endsWith('All configured authentication methods failed') ||
@@ -211,15 +211,12 @@ class SftpClient {
               ) {
                 throw err;
               }
-              retry(err);
               break;
-            }
-            default: {
-              retry(err);
             }
           }
         }
-      });
+      }
+      await promiseRetry(1, retryOpts.retries);
       const sftp = await this.getSftpChannel();
       this.endCalled = false;
       return sftp;
