@@ -202,8 +202,9 @@ class SftpClient {
           switch (err.code) {
             case 'ENOTFOUND':
             case 'ECONNREFUSED':
-            case 'ERR_SOCKET_BAD_PORT':
+            case 'ERR_SOCKET_BAD_PORT': {
               throw err;
+            }
             case undefined: {
               if (
                 err.message.endsWith('All configured authentication methods failed') ||
@@ -212,6 +213,9 @@ class SftpClient {
                 throw err;
               }
               break;
+            }
+            default: {
+              throw err;
             }
           }
         }
